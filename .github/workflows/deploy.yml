@@ -21,14 +21,11 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Lint / test (opcjonalnie)
-        run: npm run lint || echo "Lint skipped"
-
       - name: Archive build
         run: zip -r app.zip . -x "*.git*"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v3.1.2
+        uses: actions/upload-artifact@v2
         with:
           name: app
           path: app.zip
