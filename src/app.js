@@ -6,9 +6,12 @@ require('dotenv').config();
 
 (async () => {
     try {
-        // Upewnij się, że katalog dumps istnieje
         if (!fs.existsSync('dumps')) {
             fs.mkdirSync('dumps', { recursive: true });
+        }
+
+        if (!fs.existsSync('assets')) {
+            fs.mkdirSync('assets', { recursive: true });
         }
 
         console.log('🚀 Uruchamianie przeglądarki...');
@@ -18,7 +21,6 @@ require('dotenv').config();
         console.log('🌐 Otwieranie strony...');
         await page.goto('https://manifest.plstrefa.pl/', { waitUntil: 'domcontentloaded' });
 
-        // Zapisz stronę logowania do HTML
         const loginHtml = await page.content();
         fs.writeFileSync(path.join('dumps', 'login.html'), loginHtml);
         console.log('✅ Zapisano HTML strony logowania do dumps/login.html');
@@ -39,7 +41,6 @@ require('dotenv').config();
         console.log('⏳ Odczekanie 5 sekund po zalogowaniu...');
         await page.waitForTimeout(5000);
 
-        // Zapisz stronę po zalogowaniu do HTML
         const afterLoginHtml = await page.content();
         fs.writeFileSync(path.join('dumps', 'after-login.html'), afterLoginHtml);
         console.log('✅ Zapisano HTML po zalogowaniu do dumps/after-login.html');
@@ -53,7 +54,6 @@ require('dotenv').config();
         console.log('⏳ Odczekanie 2 sekund na /planowka...');
         await page.waitForTimeout(2000);
 
-        // Zapisz stronę /planowka do HTML
         const planowkaHtml = await page.content();
         fs.writeFileSync(path.join('dumps', 'planowka.html'), planowkaHtml);
         console.log('✅ Zapisano HTML strony planowki do dumps/planowka.html');
@@ -88,7 +88,7 @@ require('dotenv').config();
 
         const slackResponse = await axios.post('https://slack.com/api/chat.postMessage', {
             channel: process.env.SLACK_CHANNEL_ID,
-            text: `🚨 Nowy zrzut ekranu z planówki: ${imageUrl}`
+            text: `Maluszku masz zrzut ekranu z planówki 👉👈: ${imageUrl}`
         }, {
             headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` }
         });

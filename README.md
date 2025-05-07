@@ -76,7 +76,7 @@ IMGUR_CLIENT_ID=xxxxxxxxxxxxxxxx
 ## 🏁 **Uruchomienie skryptu:**
 
 ```bash
-node index.js
+node app.js
 ```
 
 ✅ Po uruchomieniu w katalogu pojawią się:
