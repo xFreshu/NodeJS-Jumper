@@ -62,31 +62,31 @@ require('dotenv').config();
 
         const wyloty = await page.evaluate(() => {
             const znalezioneWyloty = [];
-            const headers = Array.from(document.querySelectorAll('p.w3-center.w3-large > b'));
 
-            headers.forEach(header => {
-                const wylotMatch = header.innerText.match(/Wylot\s+(\d+)/);
-                if (!wylotMatch) return;
-                const nrWylotu = wylotMatch[1];
+            const tables = Array.from(document.querySelectorAll('table'));
 
-                // Szukamy tabeli po nagłówku
-                let table = header.closest('div')?.nextElementSibling?.querySelector('table');
-                if (!table) {
-                    // czasem tabela jest jeszcze niżej – szukamy w kolejnych elementach
-                    let sibling = header.closest('div')?.nextElementSibling;
-                    while (sibling && !table) {
-                        table = sibling.querySelector?.('table');
-                        sibling = sibling.nextElementSibling;
-                    }
-                }
+            tables.forEach(table => {
+                const rows = Array.from(table.querySelectorAll('tr'));
+                const zawieraPajaka = rows.some(row => row.innerText.includes('PAJĄK ANDRZEJ'));
 
-                if (table) {
-                    const rows = Array.from(table.querySelectorAll('tr'));
-                    for (const row of rows) {
-                        if (row.innerText.includes('PAJĄK ANDRZEJ')) {
-                            znalezioneWyloty.push(nrWylotu);
-                            break; // tylko raz na tabelę
+                if (zawieraPajaka) {
+                    // idziemy w górę DOM szukając p z "Wylot X"
+                    let prev = table.previousElementSibling;
+                    let znalezionyWylot = null;
+
+                    while (prev && prev.tagName !== 'BODY') {
+                        if (prev.tagName === 'P' && prev.innerText.match(/Wylot\s+\d+/i)) {
+                            const match = prev.innerText.match(/Wylot\s+(\d+)/i);
+                            if (match) {
+                                znalezionyWylot = match[1];
+                            }
+                            break;
                         }
+                        prev = prev.previousElementSibling;
+                    }
+
+                    if (znalezionyWylot) {
+                        znalezioneWyloty.push(znalezionyWylot);
                     }
                 }
             });
@@ -122,6 +122,8 @@ require('dotenv').config();
 
             const imageUrl = imgurResponse.data.data.link;
             console.log('✅ Zdjęcie wrzucone na Imgur:', imageUrl);
+
+            console.log('🚀 Wysyłanie powiadomienia na Slacka...');
 
             const slackResponse = await axios.post('https://slack.com/api/chat.postMessage', {
                 channel: process.env.SLACK_CHANNEL_ID,
