@@ -2,6 +2,7 @@ const { chromium } = require('playwright');
 const axios = require('axios');
 const fs = require('fs');
 const path = require('path');
+const cheerio = require('cheerio');
 require('dotenv').config();
 
 (async () => {
@@ -58,47 +59,48 @@ require('dotenv').config();
         fs.writeFileSync(path.join('dumps', 'planowka.html'), planowkaHtml);
         console.log('✅ Zapisano HTML strony planowki do dumps/planowka.html');
 
-        console.log('🔍 Szukanie PAJĄK ANDRZEJ w tabelach...');
+        // ⬇️ ANALIZA OFFLINE PRZEZ CHEERIO
+        console.log('🔍 Analiza HTML offline z cheerio...');
 
-        const wyloty = await page.evaluate(() => {
-            const znalezioneWyloty = [];
+        const $ = cheerio.load(planowkaHtml);
+        const znalezioneWyloty = [];
 
-            const tables = Array.from(document.querySelectorAll('table'));
+        $('p').each((i, p) => {
+            const text = $(p).text();
+            const match = text.match(/Wylot\s+(\d+)/i);
 
-            tables.forEach(table => {
-                const rows = Array.from(table.querySelectorAll('tr'));
-                const zawieraPajaka = rows.some(row => row.innerText.includes('PAJĄK ANDRZEJ'));
+            if (match) {
+                const nrWylotu = match[1];
+                let table = $(p).next();
 
-                if (zawieraPajaka) {
-                    // idziemy w górę DOM szukając p z "Wylot X"
-                    let prev = table.previousElementSibling;
-                    let znalezionyWylot = null;
+                // Szukamy pierwszej tabeli po <p>
+                while (table.length && table[0].tagName !== 'table') {
+                    table = table.next();
+                }
 
-                    while (prev && prev.tagName !== 'BODY') {
-                        if (prev.tagName === 'P' && prev.innerText.match(/Wylot\s+\d+/i)) {
-                            const match = prev.innerText.match(/Wylot\s+(\d+)/i);
-                            if (match) {
-                                znalezionyWylot = match[1];
-                            }
-                            break;
-                        }
-                        prev = prev.previousElementSibling;
-                    }
+                if (table.length && table[0].tagName === 'table') {
+                    const id = `wylot${nrWylotu}`;
+                    table.attr('id', id);
+                    console.log(`✅ Dodano id="${id}" do tabeli`);
 
-                    if (znalezionyWylot) {
-                        znalezioneWyloty.push(znalezionyWylot);
+                    // sprawdź, czy tabela zawiera PAJĄK ANDRZEJ
+                    const tableText = table.text();
+                    if (tableText.includes('PAJĄK ANDRZEJ')) {
+                        znalezioneWyloty.push(id);
                     }
                 }
-            });
-
-            return znalezioneWyloty;
+            }
         });
 
-        if (wyloty.length > 0) {
-            console.log(`✅ Znaleziono PAJĄK ANDRZEJ w wylotach: ${wyloty.join(', ')}`);
+        // zapisujemy zmodyfikowany HTML
+        fs.writeFileSync(path.join('dumps', 'planowka-tagged.html'), $.html(), 'utf-8');
+        console.log('✅ Zapisano zmodyfikowany HTML do dumps/planowka-tagged.html');
+
+        if (znalezioneWyloty.length > 0) {
+            console.log(`✅ PAJĄK ANDRZEJ znaleziony w tabelach: ${znalezioneWyloty.join(', ')}`);
 
             const screenshotPath = 'assets/planowka-found.png';
-            console.log('📸 Robienie zrzutu planówki (znaleziono PAJĄK ANDRZEJ)...');
+            console.log('📸 Robienie zrzutu planówki (offline analiza)...');
             await page.screenshot({ path: screenshotPath, fullPage: true });
 
             await browser.close();
@@ -127,7 +129,7 @@ require('dotenv').config();
 
             const slackResponse = await axios.post('https://slack.com/api/chat.postMessage', {
                 channel: process.env.SLACK_CHANNEL_ID,
-                text: `🚨 Znaleziono PAJĄK ANDRZEJ w wylotach: ${wyloty.join(', ')}\nZrzut ekranu: ${imageUrl}`
+                text: `🚨 Znaleziono PAJĄK ANDRZEJ w tabelach: ${znalezioneWyloty.join(', ')}\nZrzut ekranu: ${imageUrl}`
             }, {
                 headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` }
             });
@@ -140,7 +142,7 @@ require('dotenv').config();
                 console.error('❌ Wysyłka wiadomości na Slacka nie powiodła się! Błąd:', slackResponse.data.error);
             }
         } else {
-            console.log('❌ PAJĄK ANDRZEJ nie znaleziony w żadnym wylocie.');
+            console.log('❌ PAJĄK ANDRZEJ nie znaleziony w żadnej tabeli.');
             await browser.close();
         }
 
