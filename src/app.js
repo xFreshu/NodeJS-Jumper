@@ -58,14 +58,44 @@ require('dotenv').config();
         fs.writeFileSync(path.join('dumps', 'planowka.html'), planowkaHtml);
         console.log('✅ Zapisano HTML strony planowki do dumps/planowka.html');
 
-        // Szukamy "PAJĄK ANDRZEJ" i wylotu
-        const regex = /Wylot\s+(\d+)[\s\S]*?<table[\s\S]*?PAJĄK ANDRZEJ/gi;
-        const matches = [...planowkaHtml.matchAll(regex)];
+        console.log('🔍 Szukanie PAJĄK ANDRZEJ w tabelach...');
 
-        if (matches.length > 0) {
-            matches.forEach(match => {
-                console.log(`✅ Znaleziono PAJĄK ANDRZEJ w wylocie ${match[1]}`);
+        const wyloty = await page.evaluate(() => {
+            const znalezioneWyloty = [];
+            const headers = Array.from(document.querySelectorAll('p.w3-center.w3-large > b'));
+
+            headers.forEach(header => {
+                const wylotMatch = header.innerText.match(/Wylot\s+(\d+)/);
+                if (!wylotMatch) return;
+                const nrWylotu = wylotMatch[1];
+
+                // Szukamy tabeli po nagłówku
+                let table = header.closest('div')?.nextElementSibling?.querySelector('table');
+                if (!table) {
+                    // czasem tabela jest jeszcze niżej – szukamy w kolejnych elementach
+                    let sibling = header.closest('div')?.nextElementSibling;
+                    while (sibling && !table) {
+                        table = sibling.querySelector?.('table');
+                        sibling = sibling.nextElementSibling;
+                    }
+                }
+
+                if (table) {
+                    const rows = Array.from(table.querySelectorAll('tr'));
+                    for (const row of rows) {
+                        if (row.innerText.includes('PAJĄK ANDRZEJ')) {
+                            znalezioneWyloty.push(nrWylotu);
+                            break; // tylko raz na tabelę
+                        }
+                    }
+                }
             });
+
+            return znalezioneWyloty;
+        });
+
+        if (wyloty.length > 0) {
+            console.log(`✅ Znaleziono PAJĄK ANDRZEJ w wylotach: ${wyloty.join(', ')}`);
 
             const screenshotPath = 'assets/planowka-found.png';
             console.log('📸 Robienie zrzutu planówki (znaleziono PAJĄK ANDRZEJ)...');
@@ -93,13 +123,9 @@ require('dotenv').config();
             const imageUrl = imgurResponse.data.data.link;
             console.log('✅ Zdjęcie wrzucone na Imgur:', imageUrl);
 
-            const wyloty = matches.map(match => `Wylot ${match[1]}`).join(', ');
-
-            console.log('🚀 Wysyłanie powiadomienia na Slacka...');
-
             const slackResponse = await axios.post('https://slack.com/api/chat.postMessage', {
                 channel: process.env.SLACK_CHANNEL_ID,
-                text: `🚨 Znaleziono PAJĄK ANDRZEJ w: ${wyloty}\nZrzut ekranu 👉 ${imageUrl}`
+                text: `🚨 Znaleziono PAJĄK ANDRZEJ w wylotach: ${wyloty.join(', ')}\nZrzut ekranu: ${imageUrl}`
             }, {
                 headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` }
             });
