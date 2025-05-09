@@ -58,47 +58,62 @@ require('dotenv').config();
         fs.writeFileSync(path.join('dumps', 'planowka.html'), planowkaHtml);
         console.log('✅ Zapisano HTML strony planowki do dumps/planowka.html');
 
-        const screenshotPath = 'assets/planowka.png';
-        console.log('📸 Robienie zrzutu na /planowka...');
-        await page.screenshot({ path: screenshotPath, fullPage: true });
+        // Szukamy "PAJĄK ANDRZEJ" i wylotu
+        const regex = /Wylot\s+(\d+)[\s\S]*?<table[\s\S]*?PAJĄK ANDRZEJ/gi;
+        const matches = [...planowkaHtml.matchAll(regex)];
 
-        await browser.close();
-        console.log('✅ Zrzut ekranu zapisany!');
+        if (matches.length > 0) {
+            matches.forEach(match => {
+                console.log(`✅ Znaleziono PAJĄK ANDRZEJ w wylocie ${match[1]}`);
+            });
 
-        console.log('🚀 Wysyłanie zdjęcia na Imgur...');
+            const screenshotPath = 'assets/planowka-found.png';
+            console.log('📸 Robienie zrzutu planówki (znaleziono PAJĄK ANDRZEJ)...');
+            await page.screenshot({ path: screenshotPath, fullPage: true });
 
-        const imageBuffer = fs.readFileSync(screenshotPath);
+            await browser.close();
+            console.log('✅ Zrzut ekranu zapisany!');
 
-        const imgurResponse = await axios.post('https://api.imgur.com/3/image', imageBuffer, {
-            headers: {
-                Authorization: `Client-ID ${process.env.IMGUR_CLIENT_ID}`,
-                'Content-Type': 'application/octet-stream'
+            console.log('🚀 Wysyłanie zdjęcia na Imgur...');
+
+            const imageBuffer = fs.readFileSync(screenshotPath);
+
+            const imgurResponse = await axios.post('https://api.imgur.com/3/image', imageBuffer, {
+                headers: {
+                    Authorization: `Client-ID ${process.env.IMGUR_CLIENT_ID}`,
+                    'Content-Type': 'application/octet-stream'
+                }
+            });
+
+            if (!imgurResponse.data.success) {
+                console.error('❌ Upload na Imgur nie powiódł się:', imgurResponse.data);
+                return;
             }
-        });
 
-        if (!imgurResponse.data.success) {
-            console.error('❌ Upload na Imgur nie powiódł się:', imgurResponse.data);
-            return;
-        }
+            const imageUrl = imgurResponse.data.data.link;
+            console.log('✅ Zdjęcie wrzucone na Imgur:', imageUrl);
 
-        const imageUrl = imgurResponse.data.data.link;
-        console.log('✅ Zdjęcie wrzucone na Imgur:', imageUrl);
+            const wyloty = matches.map(match => `Wylot ${match[1]}`).join(', ');
 
-        console.log('🚀 Wysyłanie powiadomienia na Slacka...');
+            console.log('🚀 Wysyłanie powiadomienia na Slacka...');
 
-        const slackResponse = await axios.post('https://slack.com/api/chat.postMessage', {
-            channel: process.env.SLACK_CHANNEL_ID,
-            text: `Maluszku masz zrzut ekranu z planówki 👉👈: ${imageUrl}`
-        }, {
-            headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` }
-        });
+            const slackResponse = await axios.post('https://slack.com/api/chat.postMessage', {
+                channel: process.env.SLACK_CHANNEL_ID,
+                text: `🚨 Znaleziono PAJĄK ANDRZEJ w: ${wyloty}\nZrzut ekranu 👉 ${imageUrl}`
+            }, {
+                headers: { Authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}` }
+            });
 
-        console.log('➡️ Odpowiedź od Slacka:', slackResponse.data);
+            console.log('➡️ Odpowiedź od Slacka:', slackResponse.data);
 
-        if (slackResponse.data.ok) {
-            console.log('✅ Wiadomość została wysłana na Slacka!');
+            if (slackResponse.data.ok) {
+                console.log('✅ Wiadomość została wysłana na Slacka!');
+            } else {
+                console.error('❌ Wysyłka wiadomości na Slacka nie powiodła się! Błąd:', slackResponse.data.error);
+            }
         } else {
-            console.error('❌ Wysyłka wiadomości na Slacka nie powiodła się! Błąd:', slackResponse.data.error);
+            console.log('❌ PAJĄK ANDRZEJ nie znaleziony w żadnym wylocie.');
+            await browser.close();
         }
 
     } catch (err) {
